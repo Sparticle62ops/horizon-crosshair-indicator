@@ -1,0 +1,37 @@
+id = "crosshair_indicator"
+name = "Crosshair Indicator"
+version = "1.0.1"
+description = """Exact 1:1 Rust port of [Crosshair Indicator](https://github.com/CayMac97/crosshair-indicator)
+(MIT, CayMac), itself a 1:1 port of AmerDz01's Java Crosshair Indicator mod. Carries the upstream
+license and credit.
+
+Your crosshair tells you when the mob or player you aim at is within attack reach: the target
+indicator picks one of four styles (corner brackets, center dot, diamond pips, chevron above the
+crosshair), the color theme follows the weapon's charge state (classic white, dynamic
+green/orange, combat red, pink, diamond cyan, gold), and an optional thin cooldown bar sits below
+the crosshair while the weapon charges.
+
+The mod API wires the original's four settings: the enabled and cooldown-bar toggles live on the
+Options > Mods page (same defaults); the style and theme pickers stay config-file entries because
+the settings API only takes toggles and ranges.
+
+Known seams (engine-stage; tracked):
+- the mod API has no HUD sprite/crosshair-region draw hook, so the brackets, dot, diamond, chevron
+  and cooldown-bar fills are recorded on the seam until one lands; the key toggle and the in-game
+  style/theme cycling clicks ride the same seam.
+
+Pinned to Horizon f00125f and horizon-mixins e59da909; exact 1:1 Rust port tested against those revisions.
+
+Licence: MIT (LICENSE carries the upstream text). Source: https://github.com/Sparticle62ops/horizon-crosshair-indicator
+"""
+authors = ["CayMac", "sparticle"]
+license = "MIT"
+homepage = "https://github.com/Sparticle62ops/horizon-crosshair-indicator"
+api = "0.2"
+side = "client"
+capabilities = ["registries"]
+
+[native]
+game = "26.3"
+horizon = "f00125f61f794aaa3d4e950d301f353b35b6ee3d"
+mixins = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
