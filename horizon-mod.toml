@@ -1,4 +1,4 @@
-id = "crosshair_indicator"
+id = "crosshair_indicator_port"
 name = "Crosshair Indicator"
 version = "1.0.1"
 description = """Exact 1:1 Rust port of [Crosshair Indicator](https://github.com/CayMac97/crosshair-indicator)

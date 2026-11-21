@@ -1,4 +1,4 @@
-# Crosshair Indicator (`crosshair_indicator`)
+# Crosshair Indicator (`crosshair_indicator_port`)
 
 A Horizon client mod: your crosshair tells you when the mob or player you aim
 at is within attack reach. Exact 1:1 Rust port of
