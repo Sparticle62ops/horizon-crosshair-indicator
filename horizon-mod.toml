@@ -1,35 +1,20 @@
 id = "crosshair_indicator_port"
 name = "Crosshair Indicator"
 version = "1.0.1"
-description = """Exact 1:1 Rust port of [Crosshair Indicator](https://github.com/CayMac97/crosshair-indicator)
-(MIT, CayMac), itself a 1:1 port of AmerDz01's Java Crosshair Indicator mod. Carries the upstream
-license and credit.
+description = """Crosshair Indicator 1.0.1 on the current SDK mod API: CayMac97's Horizon mod
+(github.com/CayMac97/crosshair-indicator, MIT), itself a 1:1 port of AmerDz01's Java
+Crosshair Indicator. The upstream runtime (styles, themes, settings model) carries 1:1
+and the HUD fill plan (brackets, dot, diamond, chevron, cooldown bar) ships tested
+behind the render seam: the pinned mod API has no crosshair draw hook yet.
 
-Your crosshair tells you when the mob or player you aim at is within attack reach: the target
-indicator picks one of four styles (corner brackets, center dot, diamond pips, chevron above the
-crosshair), the color theme follows the weapon's charge state (classic white, dynamic
-green/orange, combat red, pink, diamond cyan, gold), and an optional thin cooldown bar sits below
-the crosshair while the weapon charges.
+Pinned to Horizon f00125f and horizon-mixins e59da909; tested against those revisions.
 
-The mod API wires the original's four settings: the enabled and cooldown-bar toggles live on the
-Options > Mods page (same defaults); the style and theme pickers stay config-file entries because
-the settings API only takes toggles and ranges.
-
-Known seams (engine-stage; tracked):
-- the mod API has no HUD sprite/crosshair-region draw hook, so the brackets, dot, diamond, chevron
-  and cooldown-bar fills are recorded on the seam until one lands; the key toggle and the in-game
-  style/theme cycling clicks ride the same seam.
-
-Pinned to Horizon f00125f and horizon-mixins e59da909; exact 1:1 Rust port tested against those revisions.
-
-Licence: MIT (LICENSE carries the upstream text). Source: https://github.com/Sparticle62ops/horizon-crosshair-indicator
+Licence: MIT (LICENSE carries the upstream text). Source: https://github.com/CayMac97/crosshair-indicator
 """
 authors = ["CayMac", "sparticle"]
-license = "MIT"
-homepage = "https://github.com/Sparticle62ops/horizon-crosshair-indicator"
 api = "0.2"
 side = "client"
-capabilities = ["registries"]
+capabilities = []
 
 [native]
 game = "26.3"

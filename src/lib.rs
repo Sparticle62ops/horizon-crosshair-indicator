@@ -1,97 +1,134 @@
-//! crosshair-indicator (Horizon Rust port) on the mod API.
+//! Crosshair Indicator 1.0.1 on the pinned SDK (api 0.2, f00125f61f):
+//! CayMac97's Horizon mod (`github.com/CayMac97/crosshair-indicator`, MIT)
+//! brought to the current mod API. MIT carried with the upstream credit.
 //!
-//! Upstream (CayMac97/crosshair-indicator, MIT, (c) CayMac; itself a 1:1 port
-//! of AmerDz01's Java Crosshair Indicator) keeps its four settings in the
-//! game's native settings storage and draws its HUD overlays (brackets, dot,
-//! diamond, chevron, cooldown bar) from a native_hud hook. The mod API wires
-//! what the pinned SDK (api 0.2, f00125f61f) reaches:
+//! - `runtime` carries the upstream runtime 1:1 (styles, themes, settings,
+//!   the ENABLED atomic);
+//! - `glue` carries the upstream glue: the exact HUD fill plan and the
+//!   toggle logic;
+//! - `seams` tracks the engine-stage gaps (no crosshair render hook).
 //!
-//! - the `enabled` and `cooldown` toggles register as settings on the
-//!   Options > Mods page, same defaults, upstream-style labels;
-//! - `client_setup` loads `config/crosshair_indicator.json` (defaults when
-//!   missing or broken, like the native settings storage), overlays the two
-//!   registered toggles into the live settings cell and stores the enabled
-//!   flag, mirroring upstream's `settings()` reader;
-//! - the style and theme pickers stay config-file entries because
-//!   SettingSpec only takes toggles and ranges.
-//!
-//! The HUD draw, the key toggle, the native mod-list entry and the settings
-//! click cycling are the engine seam: the mod API has no HUD sprite or
-//! crosshair-region draw hook, no key hook and no native mod-list hook, so
-//! that half is recorded on the seam (tracked in the README and upstream
-//! issue) until one lands.
-use std::path::PathBuf;
-use std::sync::{OnceLock, RwLock};
+//! Mod API wiring:
+//! - the four settings register as settings (`enabled` toggle default on,
+//!   `style` choice of 4, `theme` choice of 6, `cooldown` toggle default
+//!   on), upstream labels;
+//! - the `toggle` key registers as a key mapping (unbound default, as
+//!   upstream's `KEY_TOGGLE_DEFAULT`);
+//! - `client_setup` syncs the runtime model from the host's setting reads;
+//! - `setting_changed` re-syncs it when the player changes a setting;
+//! - `client_tick_post` consumes the toggle mapping's click and flips the
+//!   setting through the host.
 
-use mod_api::{ClientSetupEvent, ClientHost, RegistrationContext, Registrar, SettingSpec};
+use mod_api::{
+    ClientHost, ClientSetupEvent, ClientTickPostEvent, KeyConflictContext, KeyRegistration,
+    RegistrationContext, Registrar, SettingChangedEvent, SettingSpec,
+};
 
-mod runtime;
+pub mod glue;
+pub mod runtime;
+pub mod seams;
+#[cfg(test)]
+pub mod tests;
 
-/// The game directory (upstream: the game's config root).
-pub fn game_dir() -> PathBuf {
-    std::env::var_os("XI_GAME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-}
-
-/// `config/crosshair_indicator.json`.
-pub fn config_path() -> PathBuf {
-    game_dir().join("config").join(runtime::CONFIG_FILE)
-}
-
-/// The live settings the HUD seam reads (upstream: the native settings
-/// storage read back each frame).
-static LIVE_SETTINGS: OnceLock<RwLock<runtime::Settings>> = OnceLock::new();
-
-pub fn set_live_settings(settings: runtime::Settings) {
-    let cell = LIVE_SETTINGS.get_or_init(|| RwLock::new(runtime::Settings::default()));
-    *cell.write().expect("the settings cell is not poisoned") = settings;
-}
-
-pub fn live_settings() -> runtime::Settings {
-    LIVE_SETTINGS
-        .get()
-        .and_then(|cell| cell.read().ok())
-        .map(|guard| guard.clone())
-        .unwrap_or_default()
-}
+pub const MOD_ID: &str = runtime::ID;
 
 #[derive(Default)]
-struct Mod;
+pub struct Mod;
 
 #[mod_api::horizon_mod]
 impl mod_api::Hooks for Mod {
-    /// The two toggle settings the API can express, same defaults; the
-    /// style/theme enums stay file-held (SettingSpec takes only toggles and
-    /// ranges).
+    /// The four settings and the toggle key, upstream labels.
     fn register(&self, registrar: &mut dyn Registrar, _context: &RegistrationContext) {
         let _ = registrar.register_setting(SettingSpec::toggle(
             "enabled",
-            "setting.crosshair_indicator.enabled",
+            "Crosshair Indicator: ON",
             true,
+        ));
+        let _ = registrar.register_setting(SettingSpec::choice(
+            "style",
+            "Style: Brackets [ + ]",
+            [
+                "Brackets [ + ]",
+                "Center Dot",
+                "Diamond",
+                "Chevron",
+            ],
+            0,
+        ));
+        let _ = registrar.register_setting(SettingSpec::choice(
+            "theme",
+            "Color: Classic White (Default)",
+            [
+                "Classic White (Default)",
+                "Dynamic (Green/Orange)",
+                "Combat Red",
+                "Pink Aesthetic",
+                "Diamond Cyan",
+                "Gold",
+            ],
+            0,
         ));
         let _ = registrar.register_setting(SettingSpec::toggle(
             "cooldown",
-            "setting.crosshair_indicator.showCooldown",
+            "Cooldown Bar: ON",
             true,
         ));
+        let _ = registrar.register_key_mapping(
+            KeyRegistration::new("toggle", "key.keyboard.unknown")
+                .label("Toggle Crosshair Indicator"),
+        );
     }
 
-    /// 1:1 of the upstream settings load: read the stored keys (defaults
-    /// when missing or broken), overlay the two registered toggles the game
-    /// holds, and store the enabled flag the HUD seam checks.
+    /// java/glue: the initial model sync from the host's setting reads.
     fn client_setup(&self, host: &mut dyn ClientHost, _event: &mut ClientSetupEvent) {
-        let mut settings = std::fs::read_to_string(config_path())
-            .ok()
-            .map(|text| runtime::Settings::from_json(&text))
-            .unwrap_or_default();
-        if let Some(value) = host.setting_bool("enabled") {
-            settings.enabled = value;
+        sync_from_host(host);
+    }
+
+    /// java/glue: on_key's toggle through the tick's consume_click.
+    fn client_tick_post(&self, host: &mut dyn ClientHost, _event: &mut ClientTickPostEvent) {
+        if host.consume_click(MOD_ID, "toggle") {
+            let s = runtime::settings(|k| {
+                match k {
+                    "enabled" => host.setting_bool("enabled").map(|b| if b { "1" } else { "0" }.to_string()),
+                    "style" => host.setting_choice("style").map(|v| v.to_string()),
+                    "theme" => host.setting_choice("theme").map(|v| v.to_string()),
+                    "cooldown" => host.setting_bool("cooldown").map(|b| if b { "1" } else { "0" }.to_string()),
+                    _ => None,
+                }
+            });
+            if let Some(next) = glue::toggle("toggle", true, s) {
+                persist(host, &next);
+            }
         }
-        if let Some(value) = host.setting_bool("cooldown") {
-            settings.show_cooldown = value;
-        }
-        runtime::set_settings(settings.clone());
-        set_live_settings(settings);
+        generated_clear();
+    }
+
+    /// The player changed a setting on the page; re-sync the model.
+    fn setting_changed(&self, host: &mut dyn ClientHost, _event: &mut SettingChangedEvent<'_>) {
+        sync_from_host(host);
     }
 }
+
+/// java/glue: `m::settings(read)` against the host's typed reads.
+fn sync_from_host(host: &dyn ClientHost) {
+    let s = runtime::settings(|k| {
+        match k {
+            "enabled" => host.setting_bool("enabled").map(|b| if b { "1" } else { "0" }.to_string()),
+            "style" => host.setting_choice("style").map(|v| v.to_string()),
+            "theme" => host.setting_choice("theme").map(|v| v.to_string()),
+            "cooldown" => host.setting_bool("cooldown").map(|b| if b { "1" } else { "0" }.to_string()),
+            _ => None,
+        }
+    });
+    runtime::set_settings(s);
+}
+
+/// java/glue: the settings write-back (`native_set_setting`).
+fn persist(host: &dyn ClientHost, s: &runtime::Settings) {
+    for (k, v) in s.stored() {
+        host.set_setting(MOD_ID, k, &v);
+    }
+    runtime::set_settings(s.clone());
+}
+
+fn generated_clear() {}
